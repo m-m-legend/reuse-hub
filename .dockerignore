@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+target
+.idea
+.vscode
+*.zip
+*.bundle
+docs
+http
+scripts
+README.md

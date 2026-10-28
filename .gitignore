@@ -1,0 +1,17 @@
+/target/
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]

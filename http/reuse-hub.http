@@ -1,0 +1,78 @@
+@baseUrl = http://localhost:8080
+@ownerEmail = donor-demo@example.test
+@requesterEmail = school-demo@example.test
+@password = Demo-only-password-2026
+@idempotencyKey = 16a77021-b2ca-42a5-99ae-de0f726e458f
+
+### 1. Cadastrar doador (409 se já existir)
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{"name":"Laboratório doador","email":"{{ownerEmail}}","password":"{{password}}"}
+
+### 2. Cadastrar solicitante (409 se já existir)
+POST {{baseUrl}}/api/v1/auth/register
+Content-Type: application/json
+
+{"name":"Projeto educacional","email":"{{requesterEmail}}","password":"{{password}}"}
+
+### 3. Login doador
+# @name ownerLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"{{ownerEmail}}","password":"{{password}}"}
+
+### 4. Login solicitante
+# @name requesterLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{"email":"{{requesterEmail}}","password":"{{password}}"}
+
+### 5. Criar oferta
+# @name createOffer
+POST {{baseUrl}}/api/v1/offers
+Authorization: Bearer {{ownerLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Kit ESP32 + sensores",
+  "description": "Equipamento funcional para aulas de robótica. Retirada a combinar.",
+  "category": "ELECTRONICS",
+  "condition": "GOOD",
+  "city": "Rio de Janeiro",
+  "quantity": 5
+}
+
+### 6. Consultar catálogo
+GET {{baseUrl}}/api/v1/offers?category=ELECTRONICS&size=10
+
+### 7. Reservar (repita para observar replay; troque a chave para um pedido novo)
+# @name createReservation
+POST {{baseUrl}}/api/v1/reservations
+Authorization: Bearer {{requesterLogin.response.body.accessToken}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{"offerId":"{{createOffer.response.body.id}}","quantity":2}
+
+### 8. Consultar minhas reservas
+GET {{baseUrl}}/api/v1/reservations
+Authorization: Bearer {{requesterLogin.response.body.accessToken}}
+
+### 9. Doador confirma retirada
+POST {{baseUrl}}/api/v1/reservations/{{createReservation.response.body.id}}/collect
+Authorization: Bearer {{ownerLogin.response.body.accessToken}}
+
+### 10. Histórico
+GET {{baseUrl}}/api/v1/reservations/{{createReservation.response.body.id}}/events
+Authorization: Bearer {{requesterLogin.response.body.accessToken}}
+
+### Alternativa ao passo 9: cancelar (409 se já foi retirada)
+POST {{baseUrl}}/api/v1/reservations/{{createReservation.response.body.id}}/cancel
+Authorization: Bearer {{requesterLogin.response.body.accessToken}}
+
+### Arquivar oferta
+POST {{baseUrl}}/api/v1/offers/{{createOffer.response.body.id}}/archive
+Authorization: Bearer {{ownerLogin.response.body.accessToken}}

@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: reusehub
+      POSTGRES_USER: reusehub
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Execute scripts/setup_env.py primeiro}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reusehub -d reusehub"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  app:
+    build: .
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/reusehub
+      DB_USER: reusehub
+      DB_PASSWORD: ${DB_PASSWORD:?Execute scripts/setup_env.py primeiro}
+      JWT_SECRET: ${JWT_SECRET:?Execute scripts/setup_env.py primeiro}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    restart: unless-stopped
+volumes:
+  postgres-data:

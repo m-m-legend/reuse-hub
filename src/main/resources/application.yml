@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: reuse-hub
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/reusehub}
+    username: ${DB_USER:reusehub}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 5000
+      connection-init-sql: "SET lock_timeout TO '5s'"
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  mvc:
+    problemdetails:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+server:
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+  tomcat:
+    max-http-form-post-size: 64KB
+    connection-timeout: 10s
+  max-http-request-header-size: 16KB
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+app:
+  security:
+    secret: ${JWT_SECRET}
+    issuer: reuse-hub
+    audience: reuse-hub-api
+    token-ttl: 15m
+  reservation:
+    ttl: 24h
+    expiration-delay-ms: 60000
+    scheduling-enabled: true
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    persist-authorization: false

@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:h2:mem:reusehub;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=5000}
+    username: ${TEST_DB_USER:sa}
+    password: ${TEST_DB_PASSWORD:}
+    hikari:
+      connection-init-sql: ${TEST_DB_INIT_SQL:}
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+app:
+  security:
+    secret: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY3ODkwMTI=
+  reservation:
+    scheduling-enabled: false
+logging:
+  level:
+    root: WARN
