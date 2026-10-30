@@ -7,6 +7,38 @@ on:
 permissions:
   contents: read
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Build frontend image
+        run: docker build -t reuse-hub-frontend:ci .
+      - name: Smoke test frontend server
+        run: |
+          docker run -d --name frontend-smoke -p 3000:80 reuse-hub-frontend:ci
+          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://localhost:3000/ -o /tmp/frontend-index.html
+          grep -q '<div id="root">' /tmp/frontend-index.html
+      - name: Frontend container logs
+        if: always()
+        run: docker logs frontend-smoke || true
+      - name: Stop frontend container
+        if: always()
+        run: docker rm -f frontend-smoke || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
   verify:
     runs-on: ubuntu-latest
     services:
@@ -48,6 +80,18 @@ jobs:
           export JWT_SECRET="$(openssl rand -base64 32)"
           docker run -d --name reuse-hub-ci --network host --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true -e DB_URL -e DB_USER -e DB_PASSWORD -e JWT_SECRET -e SPRING_PROFILES_ACTIVE=prod reuse-hub:ci
           python3 scripts/demo.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Test frontend client against the running API
+        working-directory: frontend
+        env:
+          LIVE_API_URL: http://localhost:8080
+        run: |
+          npm ci
+          npm test
       - name: Container logs
         if: always()
         run: docker logs reuse-hub-ci || true

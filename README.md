@@ -10,15 +10,18 @@ Um exemplo: um laboratório tem **cinco kits ESP32** parados. Um projeto educaci
 reserva dois. A API mantém três disponíveis, impede uma segunda retirada das mesmas
 unidades e registra o que aconteceu com cada reserva.
 
-**Java 21 · Spring Boot 3.5.16 · PostgreSQL 17 · Maven Wrapper · MIT**
+**Java 21 · Spring Boot 3.5.16 · PostgreSQL 17 · React · TypeScript · Vite · MIT**
 
-A aplicação oferece uma API REST e documentação interativa pelo Swagger UI. A retirada
+A aplicação reúne um frontend web responsivo e uma API REST, com documentação interativa pelo Swagger UI. A retirada
 física é combinada fora da plataforma. O fluxo atende laboratórios, escolas e grupos
 que precisam organizar a disponibilidade e a entrega de equipamentos.
 
 ## Comece por aqui
 
 - [Executar em poucos passos](#executar-em-poucos-passos)
+- [Frontend e backend](#frontend-e-backend)
+- [Usar a aplicação pelo navegador](#usar-a-aplicação-pelo-navegador)
+- [Da interface ao HTTP](#da-interface-ao-http)
 - [Experimentar a API](#experimentar-a-api)
 - [Regras de negócio](#regras-de-negócio)
 - [Arquitetura e leitura do código](#arquitetura-e-leitura-do-código)
@@ -58,10 +61,17 @@ registrada não fornece dados suficientes para estimar esse impacto.
 ## Executar em poucos passos
 
 **Requisitos:** Docker Engine/Desktop com Compose v2 e Python 3.10+.
-O caminho completo com Docker não exige Java nem Maven instalados no computador.
+O caminho completo com Docker não exige Java, Maven ou Node.js instalados no computador.
 A primeira execução baixa dependências e imagens, portanto precisa de internet.
 
-Com o código obtido e o Docker em execução, abra um terminal na pasta `reuse-hub`:
+Para obter o projeto:
+
+```bash
+git clone --branch master https://github.com/m-m-legend/reuse-hub.git
+cd reuse-hub
+```
+
+Com o Docker em execução, dentro da pasta `reuse-hub`:
 
 ```bash
 python scripts/setup_env.py
@@ -78,7 +88,7 @@ Aguarde a aplicação iniciar. Para acompanhar:
 docker compose logs -f app
 ```
 
-Quando aparecer `Started ReuseHubApplication`, abra o Swagger. Use `Ctrl+C` para
+Quando aparecer `Started ReuseHubApplication`, abra **http://localhost:3000** para usar o frontend. Use `Ctrl+C` para
 sair dos logs; os contêineres continuam funcionando.
 
 O preenchimento com dados fictícios é opcional:
@@ -91,12 +101,13 @@ Esse script testa o fluxo da API; ele não inicia o servidor.
 
 | Endereço | Finalidade |
 | --- | --- |
+| <http://localhost:3000> | Frontend: catálogo, contas, doações e reservas |
 | <http://localhost:8080/swagger-ui.html> | Explorar os contratos e executar chamadas |
 | <http://localhost:8080/v3/api-docs> | Documento OpenAPI gerado pela aplicação |
 | <http://localhost:8080/actuator/health> | Saúde da API e acesso ao banco |
 | <http://localhost:8080/api/v1/offers> | Catálogo público em JSON |
 
-A raiz `/` não é uma página inicial. Use um dos endereços acima.
+A porta **3000** entrega a interface. A porta **8080** entrega o backend; a raiz `/` dessa porta não é uma página inicial.
 O Compose publica as portas apenas em `127.0.0.1`, adequado à demonstração local.
 O banco usa volume persistente: reiniciar a aplicação não apaga os registros.
 
@@ -114,7 +125,7 @@ docker compose stop
 
 Não é necessário clonar o projeto, recriar `.env` ou executar a demonstração a cada
 inicialização. Fechar o terminal ou a aba do navegador não encerra os contêineres.
-Após alterar código Java, dependências ou Dockerfile, reconstrua a imagem com
+Após alterar código Java, frontend, dependências ou Dockerfile, reconstrua as imagens com
 `docker compose up --build -d`.
 
 `docker compose down` remove os contêineres e a rede, mas mantém os dados. **`docker compose down -v` apaga o volume e todos os dados
@@ -188,6 +199,222 @@ Os nomes `APP_*` seguem o relaxed binding do Spring para as propriedades de
 O perfil `test` vive em `src/test/resources` e utiliza uma chave conhecida apenas
 para testes. O H2 também é dependência exclusiva de teste. Nenhum deles é incluído
 como modo de demonstração inseguro no JAR de produção.
+
+## Frontend e backend
+
+O repositório usa uma separação por diretórios e por processo. O backend Java continua
+na raiz para preservar os comandos, as migrations e a infraestrutura existentes.
+O frontend vive em `frontend/` e possui dependências, testes e build próprios.
+
+| Caminho | Responsabilidade |
+| --- | --- |
+| `src/main/java/` | API Spring Boot, autenticação, transações e regras de negócio |
+| `src/main/resources/db/migration/` | Evolução do banco com Flyway |
+| `src/test/` | Testes Java e integração da API |
+| `pom.xml`, `mvnw`, `mvnw.cmd` | Build Maven do backend |
+| `frontend/src/pages/` | Catálogo e acompanhamento de reservas |
+| `frontend/src/components/` | Formulários, diálogos e ilustrações de categoria |
+| `frontend/src/lib/api.ts` | Cliente HTTP, ProblemDetails e chaves de idempotência |
+| `frontend/src/lib/session.tsx` | Sessão, login, logout e expiração |
+| `frontend/src/lib/types.ts` | Tipos dos contratos JSON e rótulos em português |
+| `frontend/src/styles.css` | Identidade visual, estados e layouts responsivos |
+| `frontend/package.json`, `frontend/package-lock.json` | Dependências e scripts npm |
+| `frontend/nginx.conf`, `frontend/Dockerfile` | Build estático e proxy da API |
+| `compose.yml` | PostgreSQL, Spring Boot e frontend no mesmo ambiente |
+
+```mermaid
+flowchart TD
+    A["Navegador · localhost:3000"] --> B["Frontend · React / Nginx"]
+    B -->|"/api/v1 · JSON + Bearer"| C["Backend · Spring Boot:8080"]
+    C --> D["PostgreSQL:5432"]
+```
+
+O frontend não acessa o banco. Quem valida permissões, calcula estoque e confirma
+transações é o Spring Boot. Esconder um botão é apenas conveniência da interface;
+a autorização continua sendo verificada no servidor.
+
+No Docker, o Nginx entrega os arquivos HTML/CSS/JS e encaminha `/api/` para
+`app:8080`. O navegador enxerga uma única origem (`localhost:3000`), sem necessidade
+de liberar CORS. O endereço `app` existe apenas na rede Docker.
+
+No desenvolvimento, o Vite faz o mesmo encaminhamento para `localhost:8080`.
+Nenhum segredo do banco ou `JWT_SECRET` é colocado no código do frontend.
+
+### Desenvolver o frontend com recarga automática
+
+Use **Node.js 24** e npm. Primeiro, com `.env` configurado, inicie banco e API:
+
+```bash
+docker compose up -d db app
+```
+
+Se o backend ainda não foi construído, use `docker compose up --build -d db app`.
+Em outro terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Abra **http://localhost:5173**. O backend deve responder em `localhost:8080`.
+Também é possível executar o Java pela IDE conforme a seção anterior e manter
+somente o banco no Docker.
+
+Se a API estiver em outro endereço, configure o proxy **no processo do Vite**:
+
+```powershell
+# PowerShell, dentro de frontend/
+$env:API_PROXY_TARGET = 'http://localhost:8081'
+npm run dev
+```
+
+```bash
+# Linux/macOS, dentro de frontend/
+API_PROXY_TARGET=http://localhost:8081 npm run dev
+```
+
+A variável altera apenas o servidor de desenvolvimento. No Docker, o destino é
+configurado em `frontend/nginx.conf`. Não use `npm run preview` como substituto
+desse proxy: esse comando serve o build para inspeção, sem o encaminhamento de
+API configurado para desenvolvimento. Para testar o build integrado, use Compose.
+
+### Build e testes do frontend
+
+Dentro de `frontend/`:
+
+```bash
+npm ci
+npm test
+npm run build
+```
+
+O build verifica TypeScript e gera `frontend/dist/`. Os testes verificam o cliente
+HTTP, o tratamento de 401/ProblemDetails, falhas de rede e o isolamento/reuso das
+chaves de idempotência. A CI possui um job `frontend` independente do job Java:
+instala pelo lockfile, executa testes, compila a interface, constrói sua imagem
+Docker e confere se o Nginx entrega a página inicial. O job Java também executa o cliente HTTP do frontend contra a API real
+no contêiner, cobrindo cadastro, login, filtros, replay, permissões, estoque,
+cancelamento, retirada, histórico e arquivamento. Os arquivos compilados ficam no
+artefato `frontend-dist` da execução.
+
+O teste integrado é opcional fora da CI: sem `LIVE_API_URL`, esse caso é marcado
+como ignorado e somente os testes isolados rodam. Para executá-lo localmente,
+aponte para uma **API de testes com dados descartáveis** (ele cria duas contas,
+uma oferta e reservas, e não limpa os registros):
+
+```powershell
+# PowerShell, dentro de frontend/
+$env:LIVE_API_URL = 'http://localhost:8080'
+npm test
+Remove-Item Env:LIVE_API_URL
+```
+
+```bash
+# Linux/macOS, dentro de frontend/
+LIVE_API_URL=http://localhost:8080 npm test
+```
+
+### Sessão e comportamento da interface
+
+- O JWT fica **somente em memória**, sem `localStorage` nem cookie. Atualizar a
+  página ou fechar a aba exige novo login. O prazo informado pela API também
+  encerra a sessão; um `401` em chamada autenticada solicita novo acesso.
+- Sair remove o token da interface, mas não revoga um JWT já emitido no backend.
+- Senhas não são salvas pela aplicação. O formulário respeita também o limite
+  de 72 bytes UTF-8 do BCrypt.
+- A chave de uma reserva pendente fica em `sessionStorage`, separada por usuário,
+  oferta e quantidade. Se houver dúvida por falha de rede, repetir a mesma intenção
+  reutiliza a chave. Após resposta confirmada com sucesso, a chave é removida.
+- Cadastro e criação de oferta não têm idempotência no backend. Se a conexão cair
+  durante a publicação, confira o catálogo antes de repetir para evitar duplicação.
+- Há estados de carregamento, erro e catálogo vazio. A aplicação não inventa
+  anúncios, quantidades ou métricas quando o banco está vazio ou indisponível.
+- As imagens são **ilustrações de categoria**, identificadas na interface, e não
+  fotos dos anúncios. O contrato atual não possui upload de imagens.
+- A navegação entre catálogo e reservas ocorre na página principal; não há rotas
+  compartilháveis de detalhes nesta versão. O Nginx entrega a página inicial.
+- As fontes são carregadas do Google Fonts com fallback local. Se esse serviço
+  estiver bloqueado, a interface continua utilizável com fontes do sistema.
+
+## Usar a aplicação pelo navegador
+
+1. Abra **http://localhost:3000** (Docker) ou **http://localhost:5173** (Vite).
+2. Explore o catálogo sem login. Selecione categoria e preencha busca/cidade;
+   clique em **Buscar**. A cidade precisa corresponder ao nome cadastrado, sem
+   distinguir maiúsculas. A busca procura no título.
+3. Clique em **Entrar → Cadastre-se** e crie uma conta doadora. O cadastro bem
+   sucedido é seguido por login; se o login falhar, a conta criada permanece válida.
+4. Clique em **Quero doar**, preencha título, categoria, condição, descrição,
+   cidade e quantidade. A nova oferta aparece no catálogo.
+5. Saia da conta e crie outra, como solicitante. Uma pessoa não pode reservar sua
+   própria oferta. Use perfis ou navegadores separados se quiser manter as duas
+   sessões abertas ao mesmo tempo.
+6. Abra a oferta, escolha uma quantidade e clique em **Reservar equipamento**.
+   O estoque disponível é reduzido no backend. Acompanhe em **Minhas reservas**.
+7. Abra a reserva para consultar prazo e histórico. Como solicitante, é possível
+   **Cancelar reserva**. Para confirmar a entrega, entre como doador, abra o pedido
+   e use **Confirmar retirada**. As ações pedem confirmação na interface.
+8. Para testar cancelamento e retirada, crie reservas diferentes: uma reserva
+   retirada não pode ser cancelada. A retirada física é combinada fora da plataforma;
+   não há chat ou exposição dos contatos dos participantes.
+9. Para arquivar uma oferta sua, abra seus detalhes com a conta doadora e use
+   **Arquivar oferta**. Ela sai do catálogo, preservando reservas e histórico.
+
+**Exemplo de conferência:** publique cinco unidades, reserve duas e verifique três
+no catálogo. Cancele essa reserva e confira cinco novamente. Reserve duas com uma
+nova intenção e confirme a retirada como doador: ficam três disponíveis, porque
+retirar não repõe estoque.
+
+O botão **Atualizar** em Minhas reservas busca o estado atual. O catálogo também
+é recarregado após ações da interface, mas não usa WebSocket nem atualização
+contínua: alterações de outras pessoas exigem uma nova consulta.
+
+## Da interface ao HTTP
+
+Os caminhos abaixo usam o prefixo **`/api/v1`**. `GET` consulta; `POST` cria um
+recurso ou solicita uma transição. Este backend não oferece `PUT`, `PATCH` ou
+`DELETE` para essas funcionalidades; arquivar e cancelar são ações de domínio
+via `POST`, preservando os registros.
+
+| Ação no frontend | Método e endpoint | Dados / efeito |
+| --- | --- | --- |
+| Abrir catálogo, buscar, filtrar, paginar | `GET /offers` | Query: `search`, `city`, `category`, `availableOnly`, `page`, `size` |
+| Abrir detalhes | `GET /offers/{id}` | Carrega inclusive oferta arquivada quando acessada por uma reserva |
+| Criar conta | `POST /auth/register` | JSON: `name`, `email`, `password` |
+| Entrar | `POST /auth/login` | JSON: `email`, `password`; recebe JWT e duração |
+| Identificar usuário após login | `GET /auth/me` | Envia Bearer; retorna a conta atual |
+| Publicar doação | `POST /offers` | JSON com título, descrição, categoria, condição, cidade e quantidade |
+| Reservar | `POST /reservations` | JSON: `offerId`, `quantity`; cabeçalho `Idempotency-Key` |
+| Abrir Minhas reservas / filtrar status | `GET /reservations` | Bearer; query `status`, `page`, `size` |
+| Identificar equipamentos nas reservas | `GET /offers/{id}` | Uma consulta por oferta distinta na página |
+| Abrir histórico da reserva | `GET /reservations/{id}/events` | Somente participantes; lista de eventos ordenados |
+| Cancelar | `POST /reservations/{id}/cancel` | Somente solicitante; devolve estoque uma vez |
+| Confirmar retirada | `POST /reservations/{id}/collect` | Somente doador; encerra sem devolver estoque |
+| Arquivar | `POST /offers/{id}/archive` | Somente dono; impede novas reservas |
+| Sair | Nenhuma chamada | Descarta o token local; não existe endpoint de logout |
+
+Exemplo equivalente ao botão **Reservar equipamento**:
+
+```http
+POST /api/v1/reservations
+Authorization: Bearer TOKEN_RECEBIDO_NO_LOGIN
+Content-Type: application/json
+Idempotency-Key: 16a77021-b2ca-42a5-99ae-de0f726e458f
+
+{"offerId":"UUID_DA_OFERTA","quantity":2}
+```
+
+Uma nova reserva retorna `201`; repetir a mesma chave e conteúdo retorna `200`
+com a reserva existente. A interface trata ambos como sucesso e não repete
+mutações automaticamente. Um `409` apresenta o motivo retornado pelo servidor,
+como falta de estoque ou transição inválida.
+
+Para observar as chamadas, abra **F12 → Network/Rede → Fetch/XHR**, faça uma ação
+e selecione a requisição. Confira **Method**, **Status**, **Payload** e **Response**.
+O endereço começa com a porta do frontend porque o proxy encaminha a chamada.
+Tokens e senhas aparecem nas requisições de autenticação: não publique capturas
+ou arquivos HAR contendo esses valores.
 
 ## Experimentar a API
 
@@ -499,7 +726,7 @@ a CI.
 
 As versões das dependências estão definidas no `pom.xml`. Mudanças de versão devem
 ser acompanhadas pela leitura das notas de compatibilidade e pela execução da suíte.
-O Dependabot está configurado para propor atualizações de Maven, Docker e GitHub Actions.
+O Dependabot está configurado para propor atualizações de Maven, npm, Docker (backend e frontend) e GitHub Actions. As atualizações menores e de correção do npm são agrupadas; mudanças principais continuam exigindo revisão.
 
 ## Testes e evidências
 
@@ -536,7 +763,7 @@ complementar; o build não impõe uma porcentagem arbitrária como prova de qual
 **H2 não substitui PostgreSQL.** O workflow em `.github/workflows/ci.yml` está
 configurado para executar a mesma suíte com H2 e PostgreSQL 17, construir a imagem
 Docker e rodar a demonstração via HTTP no contêiner. Ele é acionado em pushes para
-`main`, pull requests ou manualmente na aba Actions, quando habilitado no repositório.
+`master`, pull requests ou manualmente na aba Actions, quando habilitado no repositório.
 Consulte os resultados da execução correspondente à versão que pretende utilizar.
 
 Para rodar a suíte contra um PostgreSQL local, use um **banco exclusivo de teste**.
@@ -588,6 +815,10 @@ própria, além da troca de nomes de classes.
 | Swagger não abre em `prod` | Documentação é desativada nesse perfil; use `default` no ambiente de estudo |
 | `release version 21 not supported` | Maven está usando outro Java; confira `JAVA_HOME` e `./mvnw -version` |
 | `Permission denied` em `mvnw` após extrair ZIP | No Linux/macOS, execute `chmod +x mvnw`; o clone Git preserva esse atributo |
+| Frontend abre, mas catálogo falha | Confirme `docker compose ps` e `docker compose logs app frontend`; a API pode ainda estar iniciando |
+| Porta 3000 ocupada | Altere apenas o mapeamento de `frontend`, por exemplo `127.0.0.1:3001:80`, e abra a nova porta |
+| Vite responde, mas `/api` falha | Inicie o backend na porta 8080 ou ajuste `API_PROXY_TARGET` e reinicie o Vite |
+| Login some após atualizar a página | Comportamento esperado: JWT apenas em memória; faça login novamente |
 | CI de PostgreSQL falha | Leia os relatórios; não considere o teste em H2 suficiente para liberar a mudança |
 
 ### Conflito na porta do PostgreSQL

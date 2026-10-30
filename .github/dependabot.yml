@@ -12,3 +12,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      frontend-compatible:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
