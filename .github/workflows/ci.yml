@@ -44,7 +44,7 @@ jobs:
       - name: Stop frontend container
         if: always()
         run: docker rm -f frontend-smoke || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist/
@@ -106,7 +106,7 @@ jobs:
         run: docker logs reuse-hub-ci || true
       - name: Upload test and coverage reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: verification-reports
           path: |
