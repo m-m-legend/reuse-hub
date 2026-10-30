@@ -26,8 +26,17 @@ jobs:
         run: docker build -t reuse-hub-frontend:ci .
       - name: Smoke test frontend server
         run: |
+          docker run --rm reuse-hub-frontend:ci nginx -t
           docker run -d --name frontend-smoke -p 3000:80 reuse-hub-frontend:ci
-          curl -fsS --retry 10 --retry-connrefused --retry-delay 1 http://localhost:3000/ -o /tmp/frontend-index.html
+          curl -fsS \
+            --retry 15 \
+            --retry-all-errors \
+            --retry-delay 1 \
+            --retry-max-time 45 \
+            --connect-timeout 2 \
+            --max-time 5 \
+            http://localhost:3000/ \
+            -o /tmp/frontend-index.html
           grep -q '<div id="root">' /tmp/frontend-index.html
       - name: Frontend container logs
         if: always()
